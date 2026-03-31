@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Airflow
+dags/
+logs/
+plugins/
+config/
+airflow.db
+airflow.cfg
+
+# Environment
+.env
+
+# IDE
+.vscode/
+
+# Data files
+*.parquet
+*.csv
