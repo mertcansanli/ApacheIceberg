@@ -1,0 +1,29 @@
+# models/sources.yml
+version: 2
+
+sources:
+  - name: ecommerce
+    description: "E-ticaret veri kaynakları"
+    database: iceberg
+    schema: bronze
+    
+    tables:
+      - name: raw_stock_levels
+        description: "Stok seviyeleri"
+        columns:
+          - name: SKU Code
+          - name: Stock
+          
+      - name: raw_amazon_sales
+        description: "Amazon satış verileri"
+        columns:
+          - name: Order ID
+          - name: Status
+          - name: Amount
+          
+      - name: raw_international_sales
+        description: "Uluslararası satış verileri"
+        columns:
+          - name: DATE
+          - name: CUSTOMER
+          - name: SKU
