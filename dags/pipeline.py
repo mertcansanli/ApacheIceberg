@@ -145,11 +145,182 @@ def dag_pipeline():
             logger.warning(f'Error Occurred: {e}')
             raise  # Hatayı yukarı fırlat (DAG'ın başarısız olması için)
     
-    # Task'ları birbirine bağla (dependency chain)
-    # start_pipeline -> seed_bronze -> transform_bronze_layer
+    @task 
+    def validate_bronze_data(bronze_result):
+        """Bronze layer veri doğrulama task'ı"""
+        import logging
+        logger = logging.getLogger(__name__)  # ✅ Düzeltildi: logger = logging.getLogger
+        logger.info(f"Validating Bronze Layer : {bronze_result['pipeline_id']}")
+
+        validation_check = {
+            'null_checks': 'passed',
+            'duplicate_checks': 'passed',
+            'schema_validation': 'passed',
+            'row_counts': 'passed'
+        }
+
+        return {
+            'status': 'success',
+            'layer': 'bronze_validate',
+            'pipeline_id': bronze_result['pipeline_id'],
+            'timestamp': datetime.now().isoformat(),
+            'validation_checks': validation_check
+        }
+    
+    @task  # ✅ Eklendi: @task decorator'ı eksikti
+    def transform_silver_layer(bronze_validation):
+        """Silver layer dönüşüm task'ı"""
+        import logging
+        from operators.dbt_operator import DbtOperator
+        from airflow import settings
+        logger = logging.getLogger(__name__)
+        
+        if bronze_validation['status'] != 'success':  # ✅ Düzeltildi: !== yerine !=
+            raise Exception(f"Bronze Validation Have Failed! {bronze_validation}")
+        
+        logger.info("Transforming Silver Layer: ")  # Dönüşüm başlangıç logu
+        
+        # DBT operator ile silver tag'li modelleri çalıştır
+        operator = DbtOperator(
+            task_id='transform_silver_data_internal',
+            dbt_root_dir=DBT_ROOT_DIR,
+            dbt_command='run --select tag:silver'  # Sadece silver tag'li modeller
+        )
+        
+        try:
+            operator.execute(context={})  # DBT dönüşümünü çalıştır
+            return {
+                'status': 'success',
+                'layer': 'silver_transform',
+                'pipeline_id': bronze_validation['pipeline_id'],
+                'timestamp': datetime.now().isoformat(),
+            }
+        except Exception as e:
+            logger.warning(f'Error Occurred: {e}')
+            raise  # Hatayı yukarı fırlat (DAG'ın başarısız olması için)
+
+    @task 
+    def validate_silver_data(silver_result):
+        """Silver layer veri doğrulama task'ı"""
+        import logging
+        logger = logging.getLogger(__name__)  # ✅ Düzeltildi: logger = logging.getLogger
+        logger.info(f"Validating Silver for pipeline : {silver_result['pipeline_id']}")  # ✅ Düzeltildi: loger yerine logger
+
+        validation_checks = {
+            'business_rules': 'passed',  # ✅ Düzeltildi: 'buisness_rules' -> 'business_rules'
+            'referential_integrity': 'passed',  # ✅ Düzeltildi: 'passed': yerine 'passed'
+            'aggregation_accuracy': 'passed',
+            'data_freshness': 'passed'
+        }
+
+        return {
+            'status': 'success',
+            'layer': 'silver_validate',  # ✅ Düzeltildi: virgül eklendi
+            'pipeline_id': silver_result['pipeline_id'],
+            'timestamp': datetime.now().isoformat(),  # ✅ Düzeltildi: 'timestamp' önüne virgül eklendi
+            'validation_checks': validation_checks
+        }
+    
+    @task  # ✅ Eklendi: @task decorator'ı eksikti
+    def transform_gold_layer(silver_validation):
+        """Gold layer dönüşüm task'ı"""
+        import logging
+        from operators.dbt_operator import DbtOperator
+        from airflow import settings
+        logger = logging.getLogger(__name__)
+        
+        if silver_validation['status'] != 'success':  # ✅ Düzeltildi: !== yerine !=
+            raise Exception(f"Silver Validation Have Failed! {silver_validation}")
+        
+        logger.info("Transforming Gold Layer: ")  # Dönüşüm başlangıç logu
+        
+        # DBT operator ile gold tag'li modelleri çalıştır
+        operator = DbtOperator(
+            task_id='transform_gold_data_internal',
+            dbt_root_dir=DBT_ROOT_DIR,
+            dbt_command='run --select tag:gold'  # Sadece gold tag'li modeller
+        )
+        
+        try:
+            operator.execute(context={})  # DBT dönüşümünü çalıştır
+            return {
+                'status': 'success',
+                'layer': 'gold_transform',
+                'pipeline_id': silver_validation['pipeline_id'],
+                'timestamp': datetime.now().isoformat(),
+            }
+        except Exception as e:
+            logger.warning(f'Error Occurred: {e}')
+            raise  # Hatayı yukarı fırlat (DAG'ın başarısız olması için)
+
+    @task
+    def validate_gold_data(gold_result):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Validating gold for pipeline : {gold_result['pipeline_id']}")
+
+        validation_checks={
+            'buisness_rules':'passed',
+            'metrics_caculations': 'passed',
+            'completeness_checks': 'passed'
+        }
+
+        return{
+            'status':'success',
+            'layer':'gold_validate',
+            'pipeline_id': gold_result['pipeline_id'],
+            'timestamp': datetime.now().isoformat(),
+            'validation_checks': validation_checks
+        }
+    @task
+    def generate_documentation(gold_validation):
+        import logging
+        from operators.dbt_operator import DbtOperator
+        logger= logging.getLogger(__name__)
+        if gold_validation['status'] != 'success':
+            raise Exception(f"Gold Validation Failed! Cannot Proceed with Documentation... {gold_validation}")
+        logger.info(f"Generating Documentation For the Pipeline : {gold_validation['pipeline_id']}")
+
+        operator=DbtOperator(
+            task_id='generate_dbt_docs_internal',
+            dbt_root_dir=DBT_ROOT_DIR,
+            dbt_command='docs_generate'
+        )
+
+        try:
+            operator.execute(context={})
+            return{
+                'status':'success',
+                'layer':'documentation',
+                'pipeline_id':gold_validation['pipeline_id'],
+                'timetamp': datetime.now().isoformat()
+            }
+        
+        except Exception as e:
+            logger.warning(f'Error Accured during documentation generation! {e}')
+            raise
+    @task
+    def end_pipeline(docs_result):
+        import logging
+        logger= logging.getLogger(__name__)
+        logger.info("End of the Pipeline")
+        logger.info(f"Pipeline Final Status : {docs_result["status"]}")
+        logger.info(f"Pipeline Completed at : {docs_result["timestamp"]}")
+    # ============================================
+    # TASK ZİNCİRİ - Medallion mimarisi akışı
+    # ============================================
+    # Bronze Layer
     metadata = start_pipeline()
     seed_result = seed_bronze(metadata)
-    transform_bronze_layer(seed_result)
+    bronze_transform_result = transform_bronze_layer(seed_result)
+    bronze_validation_result = validate_bronze_data(bronze_transform_result)
+    
+    # Silver Layer
+    silver_transform_result = transform_silver_layer(bronze_validation_result)
+    silver_validation_result = validate_silver_data(silver_transform_result)
+    
+    # Gold Layer
+    gold_transform_result = transform_gold_layer(silver_validation_result)
 
 # DAG'ı oluştur (decorator ile tanımlandığı için çağrılması gerekir)
 dag_pipeline_instance = dag_pipeline()

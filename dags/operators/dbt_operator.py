@@ -39,18 +39,19 @@ class DbtOperator(BaseOperator): #airflowun base operatörünü miras alır
                 raise AirflowException(f"Failed to create directory! {logs_dir} : {e}")
         if not os.access(logs_dir, os.W_OK):
             try:
-                os.chmod(logs_dir, mode: 0o777)
+                os.chmod(logs_dir, mode = 0o777)
                 self.log.info(f"Set writable permissions to logs directory ! {logs_dir}")
             except Exception as e:
                 self.log.error(f"Failed to set writable permissions for logs directory : {logs_dir}: {e}")
                 raise AirflowException(f"Failed to set writable permissions for logs directory : {logs_dir}: {e}")
 
-        if isinstance(self.dbt_command.split()):
+        if isinstance(self.dbt_command, str):
+
             command_parts = self.dbt_command.split()
 
         else : 
-            command_parts = [self.dbt_command]
-
+            command_parts = self.dbt_command
+        command_parts = self.dbt_command.split()  
         command_args = command_parts + [
             "--project-dir", self.dbt_root_dir,
             "--profiles-dir", self.dbt_root_dir,
@@ -70,7 +71,9 @@ class DbtOperator(BaseOperator): #airflowun base operatörünü miras alır
             vars_string = ' '.join([f"{k} : {v}" for k, v in self.dbt_vars.items()])
             command_args.extend(["--vars", vars_string])
 
-        self.log.info(msg="Execution DBT command : %s, ",*args: " ".join(command_args) )
+        self.log.info("Executing DBT command: %s", " ".join(command_args))
+
+
         res: dbtRunnerResult = self.runner.invoke(command_args)
 
         if res.success:
