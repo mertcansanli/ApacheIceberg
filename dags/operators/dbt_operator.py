@@ -61,10 +61,10 @@ class DbtOperator(BaseOperator): #airflowun base operatörünü miras alır
             command_args.extend(["--target", self.target])
 
         if self.select:
-            command_args.extend(["--select", self.target])
+            command_args.extend(["--select", self.select])
 
         if self.full_refresh:
-            command_args.extend(["--full-refresh", self.target])
+            command_args.append(["--full-refresh", self.target])
 
 
         if self.dbt_vars:

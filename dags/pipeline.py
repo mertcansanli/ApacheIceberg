@@ -51,57 +51,29 @@ def dag_pipeline():
 
     @task
     def seed_bronze(pipeline_metadata):
-        """
-        Bronze layer seed task'ı
-        Verileri kaynak sistemlerden bronze tablolarına yükler
-        """
         import logging
         from operators.dbt_operator import DbtOperator
         logger = logging.getLogger(__name__)
-        logger.info("Seeding bronze: ")  # Bronze seeding başlangıç logu
+        logger.info("Seeding bronze: ")
         
-        try:
-            # Trino bağlantısı kontrolü - bronze tabloları dolu mu?
-            import sqlalchemy
-            from sqlalchemy import text
-            
-            # Trino bağlantısı (Iceberg catalog üzerinden bronze schema'ya)
-            engine = sqlalchemy.create_engine('trino://trino@trino-coordinator:8080/iceberg/bronze')
-            with engine.connect() as conn:
-                # raw_customer_events tablosundaki kayıt sayısını kontrol et
-                result = conn.execute(text("SELECT count(*) as cnt FROM raw_customer_events"))
-                row_count = result.scalar()
-                
-                if row_count and row_count > 0:
-                    logger.info(f"Bronze is already seeded with {row_count} rows")  # Zaten dolu
-                    return {
-                        'status': 'skipped',  # Seeding atlanıyor
-                        'layer': 'bronze_seed',
-                        'row_count': row_count,
-                        'message': 'tables are already seeded'
-                    }
-        except Exception as e:
-            # Tablo yoksa veya bağlantı hatası varsa devam et (normal durum)
-            logger.error(f"Error checking bronze seeding: {e}")
-        
-        # DBT operator ile seeding işlemi
+        # DBT operator ile seeding işlemi - SADECE BURAYI DÜZELT
         operator = DbtOperator(
             task_id='seed_bronze_data_internal',
             dbt_root_dir=DBT_ROOT_DIR,
-            dbt_command='seed',  # DBT seed komutu
-            full_refresh=True,  # Tabloları tamamen yenile
+            dbt_command='seed --full-refresh',  # ✅ full_refresh komut içinde
+            target='trino'  # ✅ target ekle
         )
         
         try:
-            operator.execute(context={})  # DBT seeding'i çalıştır
+            operator.execute(context={})
             return {
                 'status': 'success',
                 'layer': 'bronze_seed',
                 'pipeline_id': pipeline_metadata['pipeline_id'],
                 'timestamp': datetime.now().isoformat(),
             }
-        except Exception as e:  # Hata yakalama düzeltildi
-            logger.warning(f'Error! Something went wrong: {e}')
+        except Exception as e:
+            logger.error(f'Error during seeding: {e}')
             return {
                 'status': 'failed',
                 'layer': 'bronze_seed',
@@ -304,7 +276,7 @@ def dag_pipeline():
         import logging
         logger= logging.getLogger(__name__)
         logger.info("End of the Pipeline")
-        logger.info(f"Pipeline Final Status : {docs_result["status"]}")
+        logger.info(f"Pipeline Final Status : {docs_result['status']}")
         logger.info(f"Pipeline Completed at : {docs_result["timestamp"]}")
     # ============================================
     # TASK ZİNCİRİ - Medallion mimarisi akışı

@@ -1,0 +1,33 @@
+# dbt_project.yml
+name: 'ecommerce_dbt'
+version: '1.0.0'
+config-version: 2
+
+profile: 'ecommerce_dbt'
+
+# Seed yapılandırması
+seeds:
+  ecommerce_dbt:
+    +schema: bronze
+    +enabled: true
+
+# Model yapılandırması
+models:
+  ecommerce_dbt:
+    # Bronze layer
+    bronze:
+      +materialized: table
+      +schema: bronze
+      +tags: ["bronze"]
+    
+    # Silver layer
+    silver:
+      +materialized: table
+      +schema: silver
+      +tags: ["silver"]
+    
+    # Gold layer
+    gold:
+      +materialized: table
+      +schema: gold
+      +tags: ["gold"]
